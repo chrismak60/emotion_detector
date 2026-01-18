@@ -1,2 +1,5 @@
 deepface
+
 ollama
+
+tf-keras
