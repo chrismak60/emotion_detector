@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Emotion Detector</title>
+    <link href="/static/style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-content">
+            <h1 class="navbar-title">Emotion Detector</h1>
+            <div class="navbar-links">
+                <a href="/index" class="nav-link">Home</a>
+                <a href="/logout" class="nav-link logout-link">Logout</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="dashboard-content">
+            <h2>Emotion Analysis Dashboard</h2>
+            
+            <div class="dashboard-grid">
+                <!-- Statistics Cards -->
+                <div class="stats-section">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Images Analyzed</div>
+                        <div class="stat-value" id="totalCount">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Most Detected Emotion</div>
+                        <div class="stat-value" id="topEmotion">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Average Confidence</div>
+                        <div class="stat-value" id="avgConfidence">0%</div>
+                    </div>
+                </div>
+
+                <!-- Emotion Distribution Pie Chart -->
+                <div class="chart-container pie-chart-container">
+                    <h3>Emotion Distribution</h3>
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="emotionChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Confidence Levels Bar Chart -->
+                <div class="chart-container bar-chart-container">
+                    <h3>Confidence Levels by Emotion</h3>
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="confidenceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Emotion Timeline Line Chart -->
+                <div class="chart-container timeline-chart-container">
+                    <h3>Emotion Timeline</h3>
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Table -->
+            <div class="history-section">
+                <h3>Detection History</h3>
+                <div class="table-responsive">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Emotion</th>
+                                <th>Confidence</th>
+                                <th>Filename</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: #999;">No data available</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="dashboard-actions">
+                <a href="/index" class="btn btn-primary">➕ Analyze More Images</a>
+                <button id="clearHistoryBtn" class="btn btn-secondary">Clear History</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let emotionChart = null;
+        let confidenceChart = null;
+        let timelineChart = null;
+
+        // Emotion colors for consistency
+        const emotionColors = {
+            'angry': '#f44336',
+            'disgust': '#9c27b0',
+            'fear': '#3f51b5',
+            'happy': '#4caf50',
+            'neutral': '#9e9e9e',
+            'sad': '#2196f3',
+            'surprise': '#ff9800'
+        };
+
+        // Load and display data
+        function loadDashboardData() {
+            fetch('/api/get-history')
+                .then(response => response.json())
+                .then(data => {
+                    const history = data.history || [];
+                    updateStatistics(history);
+                    updateCharts(history);
+                    updateHistoryTable(history);
+                })
+                .catch(error => {
+                    console.error('Error loading history:', error);
+                });
+        }
+
+        function updateStatistics(history) {
+            // Total count
+            document.getElementById('totalCount').textContent = history.length;
+
+            if (history.length === 0) {
+                document.getElementById('topEmotion').textContent = '-';
+                document.getElementById('avgConfidence').textContent = '0%';
+                return;
+            }
+
+            // Most detected emotion
+            const emotionCounts = {};
+            let totalConfidence = 0;
+
+            history.forEach(item => {
+                emotionCounts[item.emotion] = (emotionCounts[item.emotion] || 0) + 1;
+                totalConfidence += item.confidence;
+            });
+
+            const topEmotion = Object.keys(emotionCounts).reduce((a, b) => 
+                emotionCounts[a] > emotionCounts[b] ? a : b
+            );
+
+            document.getElementById('topEmotion').textContent = topEmotion.toUpperCase();
+            document.getElementById('avgConfidence').textContent = 
+                Math.round(totalConfidence / history.length) + '%';
+        }
+
+        function updateCharts(history) {
+            if (history.length === 0) {
+                // Show empty state
+                return;
+            }
+
+            // Prepare data
+            const emotionCounts = {};
+            const emotionConfidence = {};
+
+            history.forEach(item => {
+                emotionCounts[item.emotion] = (emotionCounts[item.emotion] || 0) + 1;
+                if (!emotionConfidence[item.emotion]) {
+                    emotionConfidence[item.emotion] = [];
+                }
+                emotionConfidence[item.emotion].push(item.confidence);
+            });
+
+            // Calculate average confidence for each emotion
+            const avgConfidencePerEmotion = {};
+            Object.keys(emotionConfidence).forEach(emotion => {
+                const values = emotionConfidence[emotion];
+                avgConfidencePerEmotion[emotion] = 
+                    Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+            });
+
+            // Pie Chart - Emotion Distribution
+            const pieCtx = document.getElementById('emotionChart').getContext('2d');
+            if (emotionChart) {
+                emotionChart.destroy();
+            }
+
+            const emotions = Object.keys(emotionCounts);
+            const counts = Object.values(emotionCounts);
+            const colors = emotions.map(e => emotionColors[e.toLowerCase()] || '#667eea');
+
+            emotionChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: emotions.map(e => e.toUpperCase()),
+                    datasets: [{
+                        data: counts,
+                        backgroundColor: colors,
+                        borderColor: '#fff',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Bar Chart - Confidence Levels
+            const barCtx = document.getElementById('confidenceChart').getContext('2d');
+            if (confidenceChart) {
+                confidenceChart.destroy();
+            }
+
+            confidenceChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: emotions.map(e => e.toUpperCase()),
+                    datasets: [{
+                        label: 'Average Confidence (%)',
+                        data: emotions.map(e => avgConfidencePerEmotion[e]),
+                        backgroundColor: colors,
+                        borderColor: colors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'x',
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+
+            // Line Chart - Emotion Timeline
+            const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+            if (timelineChart) {
+                timelineChart.destroy();
+            }
+
+            // Create datasets for each emotion showing confidence over time
+            const emotionDatasets = {};
+            history.forEach((item, index) => {
+                if (!emotionDatasets[item.emotion]) {
+                    emotionDatasets[item.emotion] = [];
+                }
+                emotionDatasets[item.emotion].push({
+                    x: index + 1,
+                    y: item.confidence
+                });
+            });
+
+            const timelineDatasets = Object.keys(emotionDatasets).map(emotion => ({
+                label: emotion.charAt(0).toUpperCase() + emotion.slice(1),
+                data: emotionDatasets[emotion],
+                borderColor: emotionColors[emotion.toLowerCase()] || '#667eea',
+                backgroundColor: emotionColors[emotion.toLowerCase()] || '#667eea',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: false,
+                pointRadius: 4,
+                pointBackgroundColor: emotionColors[emotion.toLowerCase()] || '#667eea',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2
+            }));
+
+            timelineChart = new Chart(timelineCtx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: history.length}, (_, i) => i + 1),
+                    datasets: timelineDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Detection Order'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Confidence level changes as more images are analyzed'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateHistoryTable(history) {
+            const tbody = document.getElementById('historyTableBody');
+            
+            if (history.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #999;">No data available</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = history.map((item, index) => `
+                <tr>
+                    <td>${history.length - index}</td>
+                    <td>
+                        <span class="emotion-badge" style="background-color: ${emotionColors[item.emotion.toLowerCase()] || '#667eea'};">
+                            ${item.emotion.toUpperCase()}
+                        </span>
+                    </td>
+                    <td>${Math.round(item.confidence)}%</td>
+                    <td>${item.filename}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Clear history
+        document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all history? This action cannot be undone.')) {
+                fetch('/api/clear-history', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(() => {
+                        loadDashboardData();
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+        });
+
+        // Load data on page load
+        loadDashboardData();
+    </script>
+</body>
+</html>

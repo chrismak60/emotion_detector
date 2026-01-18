@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Emotion Detector</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+    <div class="login-container">
+        <div class="login-box">
+            <!-- App title and branding -->
+            <h1>Emotion Detector</h1>
+            <h2>Login</h2>
+            
+            <!-- Display error message if login failed -->
+            {% if error %}
+            <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <!-- Login form with username and password fields -->
+            <form method="POST" action="/login" class="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="Enter username" required autofocus>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter password" required>
+                </div>
+                
+                <button type="submit" class="login-btn">Login</button>
+            </form>
+            
+            <!-- Display demo credentials for testing -->
+            <div class="login-hint">
+                <p><strong>Demo Credentials:</strong></p>
+                <p>Username: <code>user</code></p>
+                <p>Password: <code>54321</code></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Detector</title>
+    <link href="/static/style.css" rel="stylesheet">
+    <link href="/static/emo.ico" rel="icon">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-content">
+            <h1 class="navbar-title">Emotion Detector</h1>
+            <div class="navbar-links">
+                <a href="/dashboards" class="nav-link">Dashboard</a>
+                <a href="/logout" class="nav-link logout-link">Logout</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="upload-section">
+                <h2> Upload Image for Emotion Detection</h2>
+                
+                <!-- Webcam Section -->
+                <div class="capture-section">
+                    <h3>Webcam</h3>
+                    <div class="webcam-container">
+                        <video id="video" width="320" height="240" autoplay playsinline></video>
+                        <button id="captureBtn" class="btn btn-primary" disabled>Capture Photo</button>
+                    </div>
+                    <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+                    <div id="captureStatus" class="status-message"></div>
+                </div>
+
+                <!-- File Upload Section -->
+                <div class="file-upload-section">
+                    <h3>Upload File</h3>
+                    <div class="drop-zone" id="dropZone">
+                        <p>Drag and drop your image here</p>
+                        <p style="font-size: 0.9em; color: #999;">or click to select</p>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                    </div>
+                    <div id="fileName" class="file-name"></div>
+                    <button id="processBtn" class="btn btn-primary" disabled>Process Image</button>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="results-section" style="display: none;">
+                <h2>Detection Results</h2>
+                
+                <div class="results-container">
+                    <div class="image-container">
+                        <img id="resultImage" src="" alt="Processed image with bounding box">
+                    </div>
+                    
+                    <div class="emotion-info">
+                        <div class="emotion-card">
+                            <h3>Detected Emotion</h3>
+                            <div class="emotion-label" id="emotionLabel">-</div>
+                            <div class="confidence-bar">
+                                <div id="confidenceBar" class="confidence-fill"></div>
+                            </div>
+                            <p class="confidence-text" id="confidenceText">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mood-content" id="moodContent">
+                    <h3>Mood Insights & Playlist</h3>
+                    <div id="moodText" class="mood-text">Loading...</div>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="newImageBtn" class="btn btn-secondary">Analyze Another Image</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM element references
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const captureStatus = document.getElementById('captureStatus');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const processBtn = document.getElementById('processBtn');
+        const resultsSection = document.getElementById('resultsSection');
+        const newImageBtn = document.getElementById('newImageBtn');
+        
+        // State variables
+        let selectedFile = null;
+        let webcamStream = null;
+        
+        // Initialize webcam stream and request camera permissions
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+            .then(stream => {
+                video.srcObject = stream;
+                webcamStream = stream;
+                captureBtn.disabled = false;
+                captureStatus.textContent = 'Webcam ready';
+                captureStatus.style.color = '#4caf50';
+            })
+            .catch(err => {
+                console.error('Webcam access error:', err);
+                captureBtn.disabled = true;
+                captureStatus.textContent = 'Webcam not available. Please check permissions';
+                captureStatus.style.color = '#f44336';
+            });
+        
+        // Stop webcam when page unloads
+        window.addEventListener('beforeunload', () => {
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+            }
+        });
+        
+        // Capture photo from webcam
+        captureBtn.addEventListener('click', () => {
+            if (!webcamStream || captureBtn.disabled) {
+                captureStatus.textContent = 'Webcam not available';
+                return;
+            }
+            
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+                captureStatus.textContent = 'Loading webcam...';
+                return;
+            }
+            
+            try {
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                canvas.toBlob(blob => {
+                    if (!blob) {
+                        captureStatus.textContent = 'Failed to capture image';
+                        return;
+                    }
+                    
+                    selectedFile = blob;
+                    fileName.textContent = 'Webcam photo captured';
+                    processBtn.disabled = false;
+                }, 'image/jpeg');
+            } catch (error) {
+                console.error('Capture error:', error);
+                captureStatus.textContent = 'Error capturing image';
+            }
+        });
+        
+        // Handle file upload via drag and drop or click
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        // Drag over effect
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        // Drag leave effect
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
+        // Handle dropped files
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                selectedFile = files[0];
+                updateFileName();
+            }
+        });
+        
+        // Handle file input change (when user selects file)
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                selectedFile = fileInput.files[0];
+                updateFileName();
+            }
+        });
+        
+        // Update filename display and enable process button
+        function updateFileName() {
+            fileName.textContent = `${selectedFile.name || 'Image selected'}`;
+            processBtn.disabled = false;
+        }
+        
+        // Send image to server for emotion detection
+        processBtn.addEventListener('click', () => {
+            if (selectedFile) {
+                processBtn.disabled = true;
+                processBtn.textContent = 'Processing...';
+                processImage(selectedFile);
+            }
+        });
+        
+        // Make API call to process emotion detection
+        function processImage(file) {
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            fetch('/api/process-emotion', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message && !data.image) {
+                    alert('Error: ' + data.message);
+                    processBtn.disabled = false;
+                    processBtn.textContent = 'Process Image';
+                    return;
+                }
+                
+                displayResults(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error processing image: ' + error.message);
+                processBtn.disabled = false;
+                processBtn.textContent = 'Process Image';
+            });
+        }
+        
+        // Display emotion detection results
+        function displayResults(data) {
+            document.getElementById('resultImage').src = data.image;
+            document.getElementById('emotionLabel').textContent = data.emotion.toUpperCase();
+            
+            const confidence = Math.round(data.confidence);
+            document.getElementById('confidenceText').textContent = `${confidence}% confident`;
+            document.getElementById('confidenceBar').style.width = confidence + '%';
+            
+            // Set color based on emotion type
+            const emotionColors = {
+                'angry': '#f44336',
+                'disgust': '#9c27b0',
+                'fear': '#3f51b5',
+                'happy': '#4caf50',
+                'neutral': '#9e9e9e',
+                'sad': '#2196f3',
+                'surprise': '#ff9800'
+            };
+            
+            const color = emotionColors[data.emotion.toLowerCase()] || '#667eea';
+            document.getElementById('emotionLabel').style.color = color;
+            document.getElementById('confidenceBar').style.backgroundColor = color;
+            
+            // Display AI-generated mood content
+            document.getElementById('moodText').textContent = data.mood_text;
+            resultsSection.style.display = 'block';
+            
+            // Smooth scroll to results
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+            
+            processBtn.disabled = false;
+            processBtn.textContent = '🔍 Process Image';
+        }
+        
+        // Analyze another image - hide results and reset
+        newImageBtn.addEventListener('click', () => {
+            resultsSection.style.display = 'none';
+            selectedFile = null;
+            fileName.textContent = '';
+            processBtn.disabled = true;
+            fileInput.value = '';
+        });
+    </script>
+</body>
+</html>
