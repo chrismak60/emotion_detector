@@ -1,5 +1,10 @@
 deepface
-
 ollama
-
 tf-keras
+flask
+werkeug.utils
+numpy
+PIL
+tempfile
+datetime
+uuid
