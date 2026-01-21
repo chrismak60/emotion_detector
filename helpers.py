@@ -33,7 +33,7 @@ def recognize_emotion(img_path):
     return {
         "box": face_data['region'], # Bounding box coordinates (x, y, w, h)
         "label": face_data['dominant_emotion'], # Detected emotion
-        "confidence": face_data['emotion'][face_data['dominant_emotion']] # Confidence score
+        "confidence": face_data['emotion'][face_data['dominant_emotion']]# Confidence score
     }
 
 def generate_mood_content(emotion_label, confidence):
@@ -49,7 +49,7 @@ def generate_mood_content(emotion_label, confidence):
         str: AI-generated mood description with music playlist suggestion
     """
     # Create prompt for AI to generate contextual mood content
-    prompt = f"The detected emotion is {emotion_label}. Suggest a 3-song playlist that matches it. Start by saying: 'Tonight's vibe is {emotion_label}. I'm {confidence:.1f}% sure about it... (here give a short description of the mood)... For that reason, here are some songs to match the mood.' and then give the playlist you suggest. The final message should NEVER be a question."
+    prompt = f"The detected emotion is {emotion_label}. Suggest a 3-song playlist that matches it. Start by saying: 'Tonight's vibe is {emotion_label}. I'm {confidence:.1f}% sure about it... (here give a short description of the mood)... For that reason, here are some songs to match the mood.' and then give the playlist you suggest. No final questions or suggestions."
     
     # Call Ollama with Gemma model for music curation
     response = ollama.chat(
@@ -64,6 +64,4 @@ def generate_mood_content(emotion_label, confidence):
     )
     
     return response['message']['content']
-
-
     
